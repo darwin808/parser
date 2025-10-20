@@ -1,203 +1,230 @@
-📋 Invoice Parser Project Roadmap
-✅ Phase 1: MVP (Current Status - ~80% Complete)
-Completed:
+# Invoice Parser System
 
-✅ Express backend with file upload
-✅ Supabase integration (storage + database)
-✅ LLM server with Ollama integration
-✅ PDF to image conversion
-✅ Next.js frontend with basic UI
-✅ Authentication (hardcoded for testing)
-✅ End-to-end invoice upload flow
+Unified invoice parsing system with Next.js frontend, Express backend, and Python LLM service.
 
-In Progress:
+## 🏗️ Architecture
 
-🔄 Fixing Ollama image format issues
-🔄 Testing with real scanned invoices
-🔄 Improving prompt engineering for better extraction
+```
+┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+│   Next.js       │─────▶│    Express      │─────▶│   Python LLM    │
+│   Frontend      │      │    Backend      │      │   (FastAPI)     │
+│   Port: 3000    │      │   Port: 3001    │      │   Port: 8000    │
+└─────────────────┘      └─────────────────┘      └─────────────────┘
+                                                            │
+                                                            ▼
+                                                    ┌─────────────────┐
+                                                    │     Ollama      │
+                                                    │   Port: 11434   │
+                                                    └─────────────────┘
+```
 
+## 🚀 Quick Start
 
-🎯 Phase 2: Core Features Enhancement
-Authentication & User Management
+### Prerequisites
+- Node.js 18+
+- Python 3.9+
+- Ollama installed and running
 
- Real user signup/login (remove hardcoded admin)
- Email verification
- Password reset functionality
- User profile management
+### 1. Complete Setup (First Time)
+```bash
+make setup
+```
 
-Invoice Processing Improvements
+This will:
+- Install all dependencies (npm + pip)
+- Check if Ollama is running
+- Set up environment variables
 
- Multi-page PDF support
- Batch upload (multiple invoices at once)
- Support more file formats (TIFF, WebP)
- Image preprocessing (auto-rotate, enhance contrast)
- Retry mechanism for failed parses
- Manual correction UI for parsed data
+### 2. Move Your Projects
+```bash
+# Copy your existing projects into:
+# - frontend/     (your Next.js app)
+# - backend/      (your Express app)
+# - llm-service/  (your Python FastAPI app)
+```
 
-Data Validation & Accuracy
+### 3. Start Everything
+```bash
+make dev
+```
 
- Confidence scores for extracted fields
- Field-level validation rules
- Duplicate invoice detection
- Data correction interface
- Audit trail for changes
+That's it! All three services will start simultaneously.
 
+## 📋 Available Commands
 
-🚀 Phase 3: Advanced Features
-Dashboard & Analytics
+### Main Commands
+| Command | Description |
+|---------|-------------|
+| `make help` | Show all available commands |
+| `make dev` | Start all services in dev mode 🚀 |
+| `make status` | Check service status 📊 |
+| `make restart` | Restart all services 🔄 |
+| `make info` | Show project information ℹ️ |
 
- Dashboard with invoice statistics
- Monthly/yearly spending reports
- Vendor analysis
- Export data (CSV, Excel, PDF)
- Search and filter invoices
- Tags and categories
+### Development
+| Command | Description |
+|---------|-------------|
+| `make dev-next` | Start Next.js only |
+| `make dev-express` | Start Express only |
+| `make dev-python` | Start Python only |
 
-AI Improvements
+### Installation
+| Command | Description |
+|---------|-------------|
+| `make install` | Install all dependencies |
+| `make install-next` | Install Next.js dependencies |
+| `make install-express` | Install Express dependencies |
+| `make install-python` | Install Python dependencies |
 
- Fine-tune model on your specific invoice formats
- Support multiple languages
- Learn from user corrections
- Auto-categorization of expenses
- Anomaly detection (unusual amounts, duplicates)
+### Build
+| Command | Description |
+|---------|-------------|
+| `make build` | Build all services |
+| `make build-next` | Build Next.js |
+| `make build-express` | Build Express |
 
-Integration Features
+### Cleanup
+| Command | Description |
+|---------|-------------|
+| `make clean` | Clean all build artifacts |
+| `make clean-next` | Clean Next.js only |
+| `make clean-express` | Clean Express only |
+| `make clean-python` | Clean Python cache |
 
- Export to accounting software (QuickBooks, Xero)
- Email integration (parse invoices from email)
- API for third-party integrations
- Webhooks for automation
- Mobile app (React Native)
+### Utilities
+| Command | Description |
+|---------|-------------|
+| `make ports-check` | Check if ports are available |
+| `make ports-kill` | Kill processes on ports |
+| `make logs` | Show logs from all services |
+| `make test` | Run all tests |
+| `make lint` | Lint all code |
 
+### Ollama
+| Command | Description |
+|---------|-------------|
+| `make ollama-check` | Check if Ollama is running |
+| `make ollama-pull` | Pull qwen2.5vl model |
+| `make ollama-list` | List installed models |
 
-🎨 Phase 4: UX/UI Polish
-Frontend Enhancements
+## 🔧 Configuration
 
- Drag-and-drop upload
- Real-time processing status
- Invoice preview with highlighting
- Dark mode
- Responsive mobile design
- Keyboard shortcuts
- Bulk actions
- Advanced filters
+Edit `.env` file:
 
-User Experience
+```env
+# Frontend
+NEXT_PUBLIC_API_URL=http://localhost:3001
 
- Onboarding tutorial
- Help documentation
- Tooltips and guides
- Error messages improvement
- Loading states optimization
- Toast notifications
+# Backend
+PORT=3001
+LLM_SERVICE_URL=http://localhost:8000
 
+# Python LLM
+PORT=8000
+OLLAMA_HOST=http://localhost:11434
+MODEL_NAME=qwen2.5vl:latest
+```
 
-🔒 Phase 5: Production Ready
-Security
+## 📁 Project Structure
 
- Rate limiting
- File size validation
- Malware scanning for uploads
- CSRF protection
- SQL injection prevention
- XSS protection
- API authentication with JWT refresh tokens
- Role-based access control (RBAC)
+```
+invoice-parser-system/
+├── Makefile              # All commands
+├── package.json          # Root npm config
+├── .env                  # Environment variables
+├── README.md
+│
+├── frontend/             # Next.js app
+│   ├── package.json
+│   ├── next.config.js
+│   └── src/
+│
+├── backend/              # Express API
+│   ├── package.json
+│   ├── server.js
+│   └── src/
+│
+├── llm-service/          # Python FastAPI
+│   ├── requirements.txt
+│   ├── main.py
+│   └── .env
+│
+└── shared/               # Shared code
+    ├── types/
+    └── utils/
+```
 
-Performance
+## 🐛 Troubleshooting
 
- Image compression optimization
- Caching strategy (Redis)
- Database query optimization
- CDN for static assets
- Lazy loading
- Background job queue (Bull, BullMQ)
+### Ports Already in Use
+```bash
+make ports-kill
+```
 
-DevOps
+### Services Not Starting
+```bash
+# Check status
+make status
 
- Docker containerization
- CI/CD pipeline (GitHub Actions)
- Automated testing (Jest, Pytest)
- Error monitoring (Sentry)
- Logging (Winston, Loguru)
- Environment management
- Backup strategy
+# Check ports
+make ports-check
 
-Deployment
+# Restart everything
+make restart
+```
 
- Deploy Express to Railway/Render/DigitalOcean
- Deploy LLM server to GPU instance
- Deploy Next.js to Vercel
- Domain and SSL setup
- Environment variables management
- Database migrations strategy
+### Ollama Not Running
+```bash
+# Start Ollama
+ollama serve
 
+# Check if running
+make ollama-check
+```
 
-📊 Phase 6: Business Features (Optional)
-Multi-tenancy
+### Clean Install
+```bash
+make clean
+make install
+make dev
+```
 
- Organization/team accounts
- User roles (admin, viewer, editor)
- Shared invoices
- Team collaboration features
+## 🎯 Workflow Examples
 
-Monetization
+### Daily Development
+```bash
+# Morning - start working
+make dev
 
- Free tier with limits
- Paid subscription plans
- Usage-based pricing
- Payment integration (Stripe)
- Invoice generation for your service
+# Check if everything is running
+make status
+```
 
-Compliance
+### After Pulling New Code
+```bash
+make install
+make dev
+```
 
- GDPR compliance
- Data retention policies
- Privacy policy
- Terms of service
- Data export for users
+### Before Committing
+```bash
+make lint
+make test
+```
 
+### Deployment
+```bash
+make build
+make start
+```
 
-🛠️ Technical Debt & Improvements
-Code Quality
+## 📊 Service URLs
 
- Add TypeScript to Next.js
- Add type hints to Python
- Unit tests (80%+ coverage)
- Integration tests
- E2E tests (Playwright/Cypress)
- Code documentation
- API documentation (Swagger)
+- **Frontend:** http://localhost:3000
+- **Backend API:** http://localhost:3001
+- **LLM Service:** http://localhost:8000
+- **Ollama:** http://localhost:11434
 
-Infrastructure
+## 📝 License
 
- Monitoring dashboard (Grafana)
- Alerting system
- Load balancing
- Auto-scaling
- Database replication
- Disaster recovery plan
-
-
-📅 Estimated Timeline
-PhaseDurationPriorityPhase 1 (MVP)1-2 weeks🔴 CriticalPhase 2 (Core)2-3 weeks🟠 HighPhase 3 (Advanced)3-4 weeks🟡 MediumPhase 4 (Polish)2 weeks🟡 MediumPhase 5 (Production)2-3 weeks🟠 HighPhase 6 (Business)4-6 weeks🟢 Low
-
-🎯 Immediate Next Steps (This Week)
-
-Fix current Ollama issue - Get PDF parsing working
-Test with 10+ real invoices - Validate accuracy
-Add proper authentication - Replace hardcoded login
-Improve error handling - Better user feedback
-Add invoice preview - Show original file with parsed data side-by-side
-
-
-💡 Future Ideas
-
-OCR fallback (Tesseract) if LLM fails
-Voice input for quick invoice entry
-Receipt scanning (not just invoices)
-Budget tracking and alerts
-Expense approval workflow
-Multi-currency support with conversion
-Barcode/QR code scanning
-Auto-payment reminders
+MIT

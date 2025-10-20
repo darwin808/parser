@@ -1,0 +1,37 @@
+{
+  "name": "invoice-parser-system",
+  "version": "1.0.0",
+  "description": "Unified Invoice Parser: Next.js + Express + Python LLM",
+  "scripts": {
+    "dev": "concurrently -n \"NEXT,EXPRESS,PYTHON\" -c \"cyan,magenta,yellow\" \"npm run dev:next\" \"npm run dev:express\" \"npm run dev:python\"",
+    "dev:next": "cd frontend && npm run dev",
+    "dev:express": "cd backend && npm run dev",
+    "dev:python": "cd llm-server && /opt/anaconda3/bin/python main.py",
+    "install:all": "npm run install:next && npm run install:express && npm run install:python",
+    "install:next": "cd frontend && npm install",
+    "install:express": "cd backend && npm install",
+    "install:python": "cd llm-server && pip install -r requirements.txt",
+    "build": "npm run build:next && npm run build:express",
+    "build:next": "cd frontend && npm run build",
+    "build:express": "cd backend && npm run build",
+    "start": "concurrently -n \"NEXT,EXPRESS,PYTHON\" -c \"cyan,magenta,yellow\" \"npm run start:next\" \"npm run start:express\" \"npm run start:python\"",
+    "start:next": "cd frontend && npm start",
+    "start:express": "cd backend && npm start",
+    "start:python": "cd llm-server && python main.py",
+    "clean": "npm run clean:next && npm run clean:express && npm run clean:python",
+    "clean:next": "cd frontend && rm -rf .next node_modules",
+    "clean:express": "cd backend && rm -rf dist node_modules",
+    "clean:python": "cd llm-server && find . -type d -name __pycache__ -exec rm -rf {} + && rm -rf .pytest_cache",
+    "lint": "npm run lint:next && npm run lint:express && npm run lint:python",
+    "lint:next": "cd frontend && npm run lint",
+    "lint:express": "cd backend && npm run lint",
+    "lint:python": "cd llm-server && pylint *.py || true",
+    "test": "npm run test:next && npm run test:express && npm run test:python",
+    "test:next": "cd frontend && npm test",
+    "test:express": "cd backend && npm test",
+    "test:python": "cd llm-server && pytest || true"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

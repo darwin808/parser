@@ -9,7 +9,6 @@ import os
 import base64
 import requests
 from dotenv import load_dotenv
-import tempfile
 
 load_dotenv()
 
@@ -26,21 +25,16 @@ app.add_middleware(
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5vl:latest")
 
-INVOICE_PROMPT = """You are an expert at extracting structured data from invoice images.
+INVOICE_PROMPT = """Extract invoice data from this image and return as JSON.
 
-Analyze this invoice image carefully and extract ALL visible information. Return ONLY a valid JSON object with no additional text, explanation, or markdown formatting.
-
-Required JSON structure:
+JSON format:
 {
   "invoice_number": "string or null",
   "invoice_date": "YYYY-MM-DD or null",
   "due_date": "YYYY-MM-DD or null",
   "vendor_name": "string or null",
   "vendor_address": "string or null",
-  "vendor_phone": "string or null",
-  "vendor_email": "string or null",
   "customer_name": "string or null",
-  "customer_address": "string or null",
   "items": [
     {
       "description": "string",
@@ -51,21 +45,11 @@ Required JSON structure:
   ],
   "subtotal": number,
   "tax": number,
-  "tax_rate": number,
-  "discount": number,
   "total": number,
-  "currency": "string (USD, EUR, PHP, etc.)",
-  "payment_terms": "string or null",
-  "notes": "string or null"
+  "currency": "string"
 }
 
-CRITICAL INSTRUCTIONS:
-- Extract ALL line items from the invoice
-- Use null for fields that are not found
-- All numeric fields must be numbers, not strings
-- Date format: YYYY-MM-DD
-- Return ONLY the JSON object, no markdown blocks, no explanations
-"""
+Return only valid JSON, no explanation."""
 
 def pdf_to_image(pdf_bytes):
     """Convert first page of PDF to image"""
@@ -77,7 +61,7 @@ def pdf_to_image(pdf_bytes):
             pdf_bytes,
             first_page=1,
             last_page=1,
-            dpi=150,  # Lower DPI for smaller file
+            dpi=150,
             fmt='jpeg'
         )
         
@@ -95,7 +79,7 @@ def pdf_to_image(pdf_bytes):
         return image
         
     except ImportError:
-        raise Exception("pdf2image not installed")
+        raise Exception("pdf2image not installed. Run: pip install pdf2image")
     except Exception as e:
         raise Exception(f"PDF conversion failed: {str(e)}")
 
@@ -114,8 +98,8 @@ def process_image(image):
         else:
             image = image.convert('RGB')
     
-    # Resize if needed
-    max_size = 1536  # Smaller size
+    # Resize - smaller for better context fit
+    max_size = 768  # Reduced from 1024
     if max(image.size) > max_size:
         ratio = max_size / max(image.size)
         new_size = tuple(int(dim * ratio) for dim in image.size)
@@ -125,34 +109,52 @@ def process_image(image):
     return image
 
 def image_to_base64_safe(image):
-    """Convert image to base64 with validation"""
-    # Save to temporary file first to ensure valid JPEG
-    with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp:
-        tmp_path = tmp.name
-        
+    """Convert PIL Image to base64 - Multiple format attempts"""
+    
+    # Ensure RGB mode
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    
+    # Try PNG first (more reliable with vision models)
     try:
-        # Save as JPEG
-        image.save(tmp_path, 'JPEG', quality=85, optimize=True)
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG', optimize=False)
+        img_bytes = buffer.getvalue()
         
-        # Read back and verify
-        with Image.open(tmp_path) as verify_img:
-            verify_img.verify()
+        print(f"✅ PNG created: {len(img_bytes):,} bytes")
         
-        # Read the file
-        with open(tmp_path, 'rb') as f:
-            img_bytes = f.read()
+        b64_string = base64.b64encode(img_bytes).decode('utf-8')
+        print(f"✅ Base64 created: {len(b64_string):,} chars")
         
-        print(f"✅ Valid JPEG created: {len(img_bytes)} bytes")
+        return b64_string
+    except Exception as e:
+        print(f"⚠️ PNG encoding failed: {e}, trying JPEG...")
         
-        # Convert to base64
-        b64 = base64.b64encode(img_bytes).decode('utf-8')
+        # Fallback to JPEG
+        buffer = io.BytesIO()
         
-        return b64
+        # Save with specific JPEG settings for compatibility
+        image.save(
+            buffer, 
+            format='JPEG',
+            quality=85,
+            optimize=False,  # Don't optimize
+            progressive=False,  # Disable progressive
+            subsampling=0  # Best quality subsampling
+        )
         
-    finally:
-        # Clean up temp file
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+        img_bytes = buffer.getvalue()
+        
+        # Verify it's a valid JPEG
+        if not img_bytes.startswith(b'\xff\xd8'):
+            raise Exception("Generated invalid JPEG (missing SOI marker)")
+        
+        print(f"✅ JPEG created: {len(img_bytes):,} bytes")
+        
+        b64_string = base64.b64encode(img_bytes).decode('utf-8')
+        print(f"✅ Base64 created: {len(b64_string):,} chars")
+        
+        return b64_string
 
 def call_ollama_vision(image_base64, prompt):
     """Call Ollama API with vision model"""
@@ -165,13 +167,16 @@ def call_ollama_vision(image_base64, prompt):
         "stream": False,
         "options": {
             "temperature": 0.1,
-            "num_predict": 3000
+            "num_predict": 2000,  # Reduced from 3000
+            "num_ctx": 8192,  # Increase context window
+            "top_p": 0.9
         }
     }
     
     print(f"🤖 Calling Ollama...")
     print(f"   Model: {MODEL_NAME}")
-    print(f"   Image size: {len(image_base64)} chars")
+    print(f"   Image size: {len(image_base64):,} chars")
+    print(f"   Prompt length: {len(prompt)} chars")
     
     try:
         response = requests.post(url, json=payload, timeout=180)
@@ -190,7 +195,7 @@ def call_ollama_vision(image_base64, prompt):
         return result.get("response", "")
         
     except requests.Timeout:
-        raise HTTPException(status_code=504, detail="Ollama timeout")
+        raise HTTPException(status_code=504, detail="Ollama timeout (3 minutes)")
     except HTTPException:
         raise
     except Exception as e:
@@ -198,9 +203,10 @@ def call_ollama_vision(image_base64, prompt):
         raise HTTPException(status_code=500, detail=str(e))
 
 def clean_json_response(response_text):
-    """Clean and extract JSON"""
+    """Clean and extract JSON from LLM response"""
     response_text = response_text.strip()
     
+    # Remove markdown code blocks
     if response_text.startswith("```json"):
         response_text = response_text[7:]
     elif response_text.startswith("```"):
@@ -211,6 +217,7 @@ def clean_json_response(response_text):
     
     response_text = response_text.strip()
     
+    # Find JSON object
     start = response_text.find('{')
     end = response_text.rfind('}')
     
@@ -224,37 +231,108 @@ async def root():
     return {
         "service": "Invoice Parser LLM Server",
         "status": "running",
-        "model": MODEL_NAME
+        "model": MODEL_NAME,
+        "ollama_host": OLLAMA_HOST
     }
 
 @app.get("/health")
 async def health():
+    """Health check endpoint"""
     try:
         response = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
         ollama_status = "connected" if response.status_code == 200 else "disconnected"
+        
+        # Try to get model info
+        if response.status_code == 200:
+            models = response.json().get("models", [])
+            model_exists = any(m.get("name") == MODEL_NAME for m in models)
+        else:
+            model_exists = False
+            
     except:
         ollama_status = "disconnected"
+        model_exists = False
     
     return {
         "status": "healthy",
         "ollama_status": ollama_status,
-        "model": MODEL_NAME
+        "model": MODEL_NAME,
+        "model_available": model_exists
     }
+
+@app.post("/test-image")
+async def test_image(file: UploadFile = File(...)):
+    """Test endpoint to verify image encoding works with Ollama"""
+    print("\n" + "="*60)
+    print("🧪 IMAGE ENCODING TEST")
+    print("="*60)
+    
+    try:
+        contents = await file.read()
+        print(f"📎 File: {file.filename}")
+        print(f"📦 Size: {len(contents):,} bytes")
+        
+        # Load image
+        if file.content_type == "application/pdf":
+            image = pdf_to_image(contents)
+        else:
+            image = Image.open(io.BytesIO(contents))
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+        
+        print(f"🖼️ Image: {image.size}, mode: {image.mode}")
+        
+        # Process
+        image = process_image(image)
+        
+        # Encode
+        image_base64 = image_to_base64_safe(image)
+        
+        # Test with simple prompt
+        simple_prompt = "Describe what you see in this image in one sentence."
+        
+        print(f"\n🤖 Testing Ollama with simple prompt...")
+        response_text = call_ollama_vision(image_base64, simple_prompt)
+        
+        print(f"\n✅ SUCCESS! Ollama responded:")
+        print(response_text[:200])
+        
+        return JSONResponse(content={
+            "success": True,
+            "message": "Image encoding works!",
+            "response_preview": response_text[:500]
+        })
+        
+    except Exception as e:
+        print(f"\n❌ TEST FAILED: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
 
 @app.post("/parse-invoice")
 async def parse_invoice(file: UploadFile = File(...)):
+    """Main endpoint to parse invoice files (images or PDFs)"""
     print("\n" + "="*60)
     print("📨 INVOICE PARSING REQUEST")
     print("="*60)
     
     try:
+        # Validate file type
         allowed_types = ["image/jpeg", "image/png", "image/jpg", "application/pdf"]
         if file.content_type not in allowed_types:
-            raise HTTPException(status_code=400, detail="Invalid file type")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid file type: {file.content_type}. Allowed: {allowed_types}"
+            )
         
         print(f"📎 File: {file.filename}")
         print(f"📋 Type: {file.content_type}")
         
+        # Read file
         contents = await file.read()
         print(f"📦 Size: {len(contents):,} bytes")
         
@@ -268,9 +346,9 @@ async def parse_invoice(file: UploadFile = File(...)):
             if image.mode != 'RGB':
                 print(f"Converting {image.mode} to RGB")
                 image = image.convert('RGB')
-            print(f"✅ Image loaded: {image.size}")
+            print(f"✅ Image loaded: {image.size}, mode: {image.mode}")
         
-        # Process
+        # Process image
         print("\n🔧 Processing image...")
         image = process_image(image)
         
@@ -279,26 +357,36 @@ async def parse_invoice(file: UploadFile = File(...)):
         image_base64 = image_to_base64_safe(image)
         
         # Call Ollama
-        print("\n🤖 Calling Ollama...")
+        print("\n🤖 Sending to Ollama...")
         response_text = call_ollama_vision(image_base64, INVOICE_PROMPT)
         
         print("\n📝 Response received:")
-        print(response_text[:500])
+        print(response_text[:500] + "..." if len(response_text) > 500 else response_text)
         
-        # Parse
+        # Parse JSON
+        print("\n🔍 Parsing JSON...")
         cleaned = clean_json_response(response_text)
         
         try:
             parsed_data = json.loads(cleaned)
             print("✅ JSON parsed successfully")
+            
+            # Add metadata
+            parsed_data["_metadata"] = {
+                "filename": file.filename,
+                "file_size_bytes": len(contents),
+                "model_used": MODEL_NAME
+            }
+            
         except json.JSONDecodeError as e:
             print(f"❌ JSON parse error: {e}")
+            print(f"Attempted to parse: {cleaned[:200]}")
+            
+            # Return error structure
             parsed_data = {
-                "invoice_number": "ERROR",
-                "vendor_name": "Parse failed",
-                "items": [],
-                "total": 0,
-                "currency": "USD"
+                "error": "Failed to parse LLM response",
+                "raw_response": response_text[:1000],
+                "parse_error": str(e)
             }
         
         print("="*60)
@@ -308,7 +396,7 @@ async def parse_invoice(file: UploadFile = File(...)):
         return JSONResponse(content={
             "success": True,
             "data": parsed_data,
-            "message": "Success"
+            "message": "Invoice parsed successfully"
         })
         
     except HTTPException:
@@ -317,19 +405,24 @@ async def parse_invoice(file: UploadFile = File(...)):
         print(f"\n❌ ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
+        
         return JSONResponse(
             status_code=500,
-            content={"success": False, "error": str(e)}
+            content={
+                "success": False, 
+                "error": str(e),
+                "message": "Internal server error"
+            }
         )
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     print("\n" + "="*60)
-    print("🚀 LLM SERVER")
+    print("🚀 INVOICE PARSER LLM SERVER")
     print("="*60)
-    print(f"Port: {port}")
-    print(f"Ollama: {OLLAMA_HOST}")
-    print(f"Model: {MODEL_NAME}")
+    print(f"📍 Port: {port}")
+    print(f"🤖 Ollama: {OLLAMA_HOST}")
+    print(f"🧠 Model: {MODEL_NAME}")
     print("="*60 + "\n")
     
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
