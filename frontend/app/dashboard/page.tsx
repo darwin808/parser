@@ -12,6 +12,12 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // New states for custom fields and document type
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [documentType, setDocumentType] = useState("invoice");
+  const [customFields, setCustomFields] = useState([]);
+  const [showFieldsModal, setShowFieldsModal] = useState(false);
+
   const fetchInvoices = async () => {
     try {
       setLoading(true);
@@ -30,26 +36,69 @@ export default function Dashboard() {
     }
   }, [user]);
 
-  const handleFileUpload = async (e) => {
+  const handleFileSelect = (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (file) {
+      setSelectedFile(file);
+      setError("");
+      setSuccess("");
+    }
+  };
+
+  const addCustomField = () => {
+    setCustomFields([...customFields, { field: "", description: "" }]);
+  };
+
+  const removeCustomField = (index) => {
+    setCustomFields(customFields.filter((_, i) => i !== index));
+  };
+
+  const updateCustomField = (index, key, value) => {
+    const updated = [...customFields];
+    updated[index][key] = value;
+    setCustomFields(updated);
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      setError("Please select a file first");
+      return;
+    }
+
+    // Validate custom fields
+    const validFields = customFields.filter(
+      (f) => f.field.trim() && f.description.trim(),
+    );
 
     setError("");
     setSuccess("");
     setUploading(true);
 
     try {
-      console.log("Uploading file:", file.name);
-      const response = await invoiceAPI.uploadInvoice(file);
+      console.log("Uploading file:", selectedFile.name);
+      console.log("Document type:", documentType);
+      console.log("Custom fields:", validFields);
+
+      const response = await invoiceAPI.uploadInvoice(
+        selectedFile,
+        documentType,
+        validFields,
+      );
       console.log("Upload response:", response);
 
-      setSuccess("Invoice processed successfully!");
+      setSuccess("Document processed successfully!");
+      setSelectedFile(null);
+      setCustomFields([]);
+      setShowFieldsModal(false);
       await fetchInvoices();
-      e.target.value = "";
+
+      // Reset file input
+      const fileInput = document.getElementById("invoice-upload");
+      if (fileInput) fileInput.value = "";
     } catch (err) {
       console.error("Upload error:", err);
       setError(
-        err.response?.data?.error || err.message || "Failed to upload invoice",
+        err.response?.data?.error || err.message || "Failed to upload document",
       );
     } finally {
       setUploading(false);
@@ -57,14 +106,14 @@ export default function Dashboard() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Delete this invoice?")) return;
+    if (!confirm("Delete this document?")) return;
 
     try {
       await invoiceAPI.deleteInvoice(id);
-      setSuccess("Invoice deleted!");
+      setSuccess("Document deleted!");
       await fetchInvoices();
     } catch (err) {
-      setError("Failed to delete invoice");
+      setError("Failed to delete document");
     }
   };
 
@@ -89,15 +138,15 @@ export default function Dashboard() {
       {/* Header */}
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold">📄 Invoice Parser</h1>
+          <h1 className="text-3xl font-bold">📄 Document Parser</h1>
           <p className="text-sm text-gray-600 mt-1">{user.email}</p>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Upload */}
+        {/* Upload Section */}
         <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">Upload Invoice</h2>
+          <h2 className="text-xl font-semibold mb-4">Upload Document</h2>
 
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded">
@@ -111,12 +160,32 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+          {/* Document Type Selection */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Document Type
+            </label>
+            <select
+              value={documentType}
+              onChange={(e) => setDocumentType(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={uploading}
+            >
+              <option value="invoice">Invoice</option>
+              <option value="receipt">Receipt</option>
+              <option value="purchase_order">Purchase Order</option>
+              <option value="bill">Bill</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          {/* File Selection */}
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center mb-4">
             <input
               type="file"
               id="invoice-upload"
               accept="image/*,.pdf"
-              onChange={handleFileUpload}
+              onChange={handleFileSelect}
               disabled={uploading}
               className="hidden"
             />
@@ -126,11 +195,84 @@ export default function Dashboard() {
             >
               <div className="text-6xl mb-4">📤</div>
               <p className="text-lg font-medium mb-2">
-                {uploading ? "Processing..." : "Click to upload"}
+                {selectedFile ? selectedFile.name : "Click to select file"}
               </p>
               <p className="text-sm text-gray-500">JPG, PNG, PDF (Max 10MB)</p>
             </label>
           </div>
+
+          {/* Custom Fields Section */}
+          {selectedFile && (
+            <div className="mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <label className="block text-sm font-medium text-gray-700">
+                  Custom Fields (Optional)
+                </label>
+                <button
+                  onClick={addCustomField}
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  disabled={uploading}
+                >
+                  + Add Field
+                </button>
+              </div>
+
+              {customFields.length > 0 && (
+                <div className="space-y-3 bg-gray-50 p-4 rounded-lg">
+                  {customFields.map((field, index) => (
+                    <div key={index} className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Field name (e.g., PO Number)"
+                        value={field.field}
+                        onChange={(e) =>
+                          updateCustomField(index, "field", e.target.value)
+                        }
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        disabled={uploading}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Description (e.g., Purchase order number)"
+                        value={field.description}
+                        onChange={(e) =>
+                          updateCustomField(
+                            index,
+                            "description",
+                            e.target.value,
+                          )
+                        }
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        disabled={uploading}
+                      />
+                      <button
+                        onClick={() => removeCustomField(index)}
+                        className="px-3 py-2 text-red-600 hover:text-red-800 font-medium"
+                        disabled={uploading}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Upload Button */}
+          {selectedFile && (
+            <button
+              onClick={handleUpload}
+              disabled={uploading}
+              className={`w-full py-3 px-4 rounded-lg font-medium text-white ${
+                uploading
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            >
+              {uploading ? "Processing..." : "Upload & Process"}
+            </button>
+          )}
 
           {uploading && (
             <div className="mt-4">
@@ -144,10 +286,10 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* List */}
+        {/* Documents List */}
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b">
-            <h2 className="text-xl font-semibold">Invoices</h2>
+            <h2 className="text-xl font-semibold">Documents</h2>
           </div>
 
           {loading ? (
@@ -157,7 +299,7 @@ export default function Dashboard() {
             </div>
           ) : invoices.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
-              No invoices yet. Upload one above!
+              No documents yet. Upload one above!
             </div>
           ) : (
             <div className="divide-y">

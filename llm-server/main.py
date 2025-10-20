@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -9,6 +9,7 @@ import os
 import base64
 import requests
 from dotenv import load_dotenv
+from typing import Optional
 
 load_dotenv()
 
@@ -25,31 +26,71 @@ app.add_middleware(
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5vl:latest")
 
-INVOICE_PROMPT = """Extract invoice data from this image and return as JSON.
-
-JSON format:
-{
-  "invoice_number": "string or null",
-  "invoice_date": "YYYY-MM-DD or null",
-  "due_date": "YYYY-MM-DD or null",
-  "vendor_name": "string or null",
-  "vendor_address": "string or null",
-  "customer_name": "string or null",
-  "items": [
-    {
-      "description": "string",
-      "quantity": number,
-      "unit_price": number,
-      "total": number
+def build_prompt(document_type: str, custom_fields: list = None):
+    """Build dynamic prompt based on document type and custom fields"""
+    
+    # Base structure for all documents
+    base_structure = {
+        "invoice_number": "string or null",
+        "invoice_date": "YYYY-MM-DD or null",
+        "due_date": "YYYY-MM-DD or null",
+        "vendor_name": "string or null",
+        "vendor_address": "string or null",
+        "customer_name": "string or null",
+        "items": [
+            {
+                "description": "string",
+                "quantity": "number",
+                "unit_price": "number",
+                "total": "number"
+            }
+        ],
+        "subtotal": "number",
+        "tax": "number",
+        "total": "number",
+        "currency": "string"
     }
-  ],
-  "subtotal": number,
-  "tax": number,
-  "total": number,
-  "currency": "string"
-}
+    
+    # Add custom fields to structure
+    if custom_fields:
+        for field in custom_fields:
+            field_name = field.get("field", "").lower().replace(" ", "_")
+            field_desc = field.get("description", "")
+            if field_name:
+                base_structure[field_name] = f"string or null - {field_desc}"
+    
+    # Document type specific instructions
+    doc_type_instructions = {
+        "invoice": "This is an INVOICE document. Focus on invoice-specific details.",
+        "receipt": "This is a RECEIPT document. Focus on payment and transaction details.",
+        "purchase_order": "This is a PURCHASE ORDER document. Focus on order details and terms.",
+        "bill": "This is a BILL document. Focus on charges and payment due.",
+        "other": "Extract all relevant financial information from this document."
+    }
+    
+    instruction = doc_type_instructions.get(document_type, doc_type_instructions["other"])
+    
+    # Build custom fields instruction
+    custom_fields_instruction = ""
+    if custom_fields:
+        custom_fields_instruction = "\n\nIMPORTANT - Extract these custom fields:\n"
+        for field in custom_fields:
+            field_name = field.get("field", "")
+            field_desc = field.get("description", "")
+            if field_name:
+                custom_fields_instruction += f"- {field_name}: {field_desc}\n"
+    
+    # Build the complete prompt
+    prompt = f"""{instruction}
+
+Extract data from this document and return as JSON.
+{custom_fields_instruction}
+JSON format:
+{json.dumps(base_structure, indent=2)}
 
 Return only valid JSON, no explanation."""
+    
+    return prompt
 
 def pdf_to_image(pdf_bytes):
     """Convert first page of PDF to image"""
@@ -138,9 +179,9 @@ def image_to_base64_safe(image):
             buffer, 
             format='JPEG',
             quality=85,
-            optimize=False,  # Don't optimize
-            progressive=False,  # Disable progressive
-            subsampling=0  # Best quality subsampling
+            optimize=False,
+            progressive=False,
+            subsampling=0
         )
         
         img_bytes = buffer.getvalue()
@@ -167,8 +208,8 @@ def call_ollama_vision(image_base64, prompt):
         "stream": False,
         "options": {
             "temperature": 0.1,
-            "num_predict": 2000,  # Reduced from 3000
-            "num_ctx": 8192,  # Increase context window
+            "num_predict": 2000,
+            "num_ctx": 8192,
             "top_p": 0.9
         }
     }
@@ -314,13 +355,28 @@ async def test_image(file: UploadFile = File(...)):
         )
 
 @app.post("/parse-invoice")
-async def parse_invoice(file: UploadFile = File(...)):
-    """Main endpoint to parse invoice files (images or PDFs)"""
+async def parse_invoice(
+    file: UploadFile = File(...),
+    document_type: str = Form("invoice"),
+    custom_fields: Optional[str] = Form(None)
+):
+    """Main endpoint to parse invoice files (images or PDFs) with custom fields"""
     print("\n" + "="*60)
-    print("📨 INVOICE PARSING REQUEST")
+    print("📨 DOCUMENT PARSING REQUEST")
     print("="*60)
     
     try:
+        # Parse custom fields if provided
+        custom_fields_list = []
+        if custom_fields:
+            try:
+                custom_fields_list = json.loads(custom_fields)
+                print(f"🔧 Custom fields received: {len(custom_fields_list)}")
+                for field in custom_fields_list:
+                    print(f"   - {field.get('field')}: {field.get('description')}")
+            except json.JSONDecodeError as e:
+                print(f"⚠️  Failed to parse custom fields: {e}")
+        
         # Validate file type
         allowed_types = ["image/jpeg", "image/png", "image/jpg", "application/pdf"]
         if file.content_type not in allowed_types:
@@ -331,6 +387,7 @@ async def parse_invoice(file: UploadFile = File(...)):
         
         print(f"📎 File: {file.filename}")
         print(f"📋 Type: {file.content_type}")
+        print(f"🏷️  Document Type: {document_type}")
         
         # Read file
         contents = await file.read()
@@ -356,9 +413,16 @@ async def parse_invoice(file: UploadFile = File(...)):
         print("\n📦 Creating base64...")
         image_base64 = image_to_base64_safe(image)
         
+        # Build dynamic prompt
+        print("\n📝 Building prompt...")
+        prompt = build_prompt(document_type, custom_fields_list)
+        print(f"✅ Prompt built: {len(prompt)} chars")
+        if custom_fields_list:
+            print(f"   Including {len(custom_fields_list)} custom fields")
+        
         # Call Ollama
         print("\n🤖 Sending to Ollama...")
-        response_text = call_ollama_vision(image_base64, INVOICE_PROMPT)
+        response_text = call_ollama_vision(image_base64, prompt)
         
         print("\n📝 Response received:")
         print(response_text[:500] + "..." if len(response_text) > 500 else response_text)
@@ -375,7 +439,9 @@ async def parse_invoice(file: UploadFile = File(...)):
             parsed_data["_metadata"] = {
                 "filename": file.filename,
                 "file_size_bytes": len(contents),
-                "model_used": MODEL_NAME
+                "model_used": MODEL_NAME,
+                "document_type": document_type,
+                "custom_fields_count": len(custom_fields_list)
             }
             
         except json.JSONDecodeError as e:
@@ -396,7 +462,7 @@ async def parse_invoice(file: UploadFile = File(...)):
         return JSONResponse(content={
             "success": True,
             "data": parsed_data,
-            "message": "Invoice parsed successfully"
+            "message": "Document parsed successfully"
         })
         
     except HTTPException:

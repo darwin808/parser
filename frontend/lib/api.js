@@ -4,9 +4,15 @@ import { supabase } from "./supabase";
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export const invoiceAPI = {
-  async uploadInvoice(file) {
+  async uploadInvoice(file, documentType = "invoice", customFields = []) {
     const formData = new FormData();
     formData.append("invoice", file);
+    formData.append("documentType", documentType);
+
+    // Add custom fields as JSON string
+    if (customFields.length > 0) {
+      formData.append("customFields", JSON.stringify(customFields));
+    }
 
     const {
       data: { session },

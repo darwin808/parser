@@ -1,6 +1,6 @@
 {
   "name": "invoice-parser-system",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Unified Invoice Parser: Next.js + Express + Python LLM",
   "scripts": {
     "dev": "concurrently -n \"NEXT,EXPRESS,PYTHON\" -c \"cyan,magenta,yellow\" \"npm run dev:next\" \"npm run dev:express\" \"npm run dev:python\"",

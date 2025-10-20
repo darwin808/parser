@@ -128,9 +128,23 @@ app.post(
       const fileName = req.file.originalname;
       const fileType = req.file.mimetype;
 
-      console.log("📄 Processing invoice for user:", userId);
+      // Extract document type and custom fields from request body
+      const documentType = req.body.documentType || "invoice";
+      let customFields = [];
+
+      try {
+        if (req.body.customFields) {
+          customFields = JSON.parse(req.body.customFields);
+        }
+      } catch (parseError) {
+        console.warn("⚠️  Failed to parse custom fields:", parseError.message);
+      }
+
+      console.log("📄 Processing document for user:", userId);
       console.log("📁 File:", fileName);
       console.log("📋 Type:", fileType);
+      console.log("🏷️  Document Type:", documentType);
+      console.log("🔧 Custom Fields:", JSON.stringify(customFields, null, 2));
 
       // Step 1: Upload file to Supabase Storage
       const storagePath = `${userId}/${Date.now()}_${fileName}`;
@@ -164,6 +178,8 @@ app.post(
           file_url: publicUrl,
           file_name: fileName,
           status: "processing",
+          document_type: documentType,
+          custom_fields: customFields.length > 0 ? customFields : null,
         })
         .select()
         .single();
@@ -175,14 +191,26 @@ app.post(
 
       console.log("✅ Invoice created:", invoice.id);
 
-      // Step 3: Send file to LLM server for processing
-      console.log("🤖 Sending to LLM server...");
+      // Step 3: Send file + metadata to LLM server for processing
+      console.log("🤖 Preparing data for LLM server...");
       const formData = new FormData();
+
+      // Append the file
       formData.append("file", fs.createReadStream(filePath), {
         filename: fileName,
         contentType: fileType,
       });
 
+      // Append document type
+      formData.append("document_type", documentType);
+
+      // Append custom fields as JSON string
+      if (customFields.length > 0) {
+        formData.append("custom_fields", JSON.stringify(customFields));
+        console.log("📦 Custom fields added to request");
+      }
+
+      console.log("🚀 Sending to LLM server...");
       const llmResponse = await fetch(
         `${process.env.LLM_SERVER_URL}/parse-invoice`,
         {
@@ -234,7 +262,7 @@ app.post(
 
       res.json({
         success: true,
-        message: "Invoice processed successfully",
+        message: "Document processed successfully",
         invoice: updatedInvoice,
       });
     } catch (error) {
