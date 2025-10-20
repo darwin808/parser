@@ -30,7 +30,7 @@ dev-express: ## Start Express only
 
 dev-python: ## Start Python LLM only
 	@echo "$(CYAN)Starting Python LLM...$(NC)"
-	@cd llm-server && /opt/anaconda3/bin/python main.py
+	@cd llm-server && /opt/anaconda3/bin/python app.py
 
 # Installation Commands
 install: ## 📦 Install all dependencies

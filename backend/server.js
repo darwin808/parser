@@ -7,64 +7,73 @@ const FormData = require("form-data");
 const fetch = require("node-fetch");
 const fs = require("fs");
 const path = require("path");
+const pino = require("pino");
+const pinoHttp = require("pino-http");
 
 const app = express();
 
-// Middleware
-app.use(
-  cors({
-    origin: "http://localhost:3000",
-    credentials: true,
-  }),
-);
-app.use(express.json());
-
-// Create uploads directory
-const uploadsDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-
-// Multer setup - accept images and PDFs
-const upload = multer({
-  dest: "uploads/",
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = [
-      "image/jpeg",
-      "image/png",
-      "image/jpg",
-      "application/pdf",
-    ];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error("Invalid file type. Only JPEG, PNG, and PDF are allowed."));
-    }
+// ============ LOGGER SETUP ============
+const logger = pino({
+  level: process.env.LOG_LEVEL || "info",
+  transport: {
+    target: "pino-pretty",
+    options: {
+      colorize: true,
+      translateTime: "HH:MM:ss",
+      ignore: "pid,hostname",
+      singleLine: false,
+    },
   },
 });
 
-// Supabase client
+const httpLogger = pinoHttp({
+  logger,
+  customLogLevel: (req, res, err) => {
+    if (res.statusCode >= 400 && res.statusCode < 500) return "warn";
+    if (res.statusCode >= 500 || err) return "error";
+    return "info";
+  },
+  customSuccessMessage: (req, res) => {
+    return `${req.method} ${req.url} completed`;
+  },
+  customErrorMessage: (req, res, err) => {
+    return `${req.method} ${req.url} failed: ${err.message}`;
+  },
+});
+
+// Middleware
+app.use(httpLogger);
+app.use(cors({ origin: "http://localhost:3000", credentials: true }));
+app.use(express.json());
+
+// Setup
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+
+// Config
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
 );
 
-// Auth middleware
-const authenticateUser = async (req, res, next) => {
+const upload = multer({
+  dest: "uploads/",
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/jpg", "application/pdf"];
+    allowed.includes(file.mimetype)
+      ? cb(null, true)
+      : cb(new Error("Invalid file type"));
+  },
+});
+
+// ============ MIDDLEWARE ============
+const auth = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader) {
-      return res.status(401).json({ error: "No authorization header" });
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-
+    const token = req.headers.authorization?.replace("Bearer ", "");
     if (!token) {
-      return res.status(401).json({ error: "No token provided" });
+      req.log.warn("Authentication failed: No token provided");
+      return res.status(401).json({ error: "No token" });
     }
 
     const {
@@ -73,18 +82,95 @@ const authenticateUser = async (req, res, next) => {
     } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-      return res.status(401).json({ error: "Invalid or expired token" });
+      req.log.warn({ error }, "Authentication failed: Invalid token");
+      return res.status(401).json({ error: "Invalid token" });
     }
 
     req.user = user;
+    req.log.info({ userId: user.id }, "User authenticated");
     next();
   } catch (error) {
-    console.error("Auth error:", error);
-    res.status(401).json({ error: "Authentication failed" });
+    req.log.error({ error }, "Authentication error");
+    res.status(401).json({ error: "Auth failed" });
   }
 };
 
-// Health check
+// ============ HELPERS ============
+const cleanup = (filePath) => {
+  if (filePath && fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+    logger.debug({ filePath }, "Cleaned up temporary file");
+  }
+};
+
+const uploadToStorage = async (userId, fileName, filePath, fileType) => {
+  const storagePath = `${userId}/${Date.now()}_${fileName}`;
+  const fileBuffer = fs.readFileSync(filePath);
+
+  logger.debug({ userId, fileName, storagePath }, "Uploading to storage");
+
+  const { error } = await supabase.storage
+    .from("invoices")
+    .upload(storagePath, fileBuffer, { contentType: fileType });
+
+  if (error) {
+    logger.error({ error, storagePath }, "Storage upload failed");
+    throw new Error(`Upload failed: ${error.message}`);
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from("invoices").getPublicUrl(storagePath);
+
+  logger.info({ publicUrl }, "File uploaded successfully");
+  return publicUrl;
+};
+
+const sendToLLM = async (
+  filePath,
+  fileName,
+  fileType,
+  docType,
+  customFields,
+) => {
+  const formData = new FormData();
+  formData.append("file", fs.createReadStream(filePath), {
+    filename: fileName,
+    contentType: fileType,
+  });
+  formData.append("document_type", docType);
+  if (customFields.length > 0) {
+    formData.append("custom_fields", JSON.stringify(customFields));
+  }
+
+  logger.debug(
+    { fileName, docType, customFieldsCount: customFields.length },
+    "Sending to LLM",
+  );
+
+  const response = await fetch(`${process.env.LLM_SERVER_URL}/parse-invoice`, {
+    method: "POST",
+    body: formData,
+    headers: formData.getHeaders(),
+    timeout: 120000,
+  });
+
+  if (!response.ok) {
+    logger.error(
+      { status: response.status, statusText: response.statusText },
+      "LLM processing failed",
+    );
+    throw new Error("LLM processing failed");
+  }
+
+  const result = await response.json();
+  logger.info("LLM processing completed successfully");
+  return result;
+};
+
+// ============ ROUTES ============
+
+// Health
 app.get("/health", (req, res) => {
   res.json({
     status: "healthy",
@@ -93,84 +179,55 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Test LLM connection
 app.get("/api/llm/health", async (req, res) => {
   try {
     const response = await fetch(`${process.env.LLM_SERVER_URL}/health`);
     const data = await response.json();
-    res.json({
-      llm_status: "connected",
-      llm_response: data,
-    });
+    req.log.info({ llmStatus: data }, "LLM health check successful");
+    res.json({ llm_status: "connected", llm_response: data });
   } catch (error) {
-    res.status(500).json({
-      llm_status: "disconnected",
-      error: error.message,
-    });
+    req.log.error({ error }, "LLM health check failed");
+    res.status(500).json({ llm_status: "disconnected", error: error.message });
   }
 });
 
-// Main endpoint: Upload and process invoice
+// Process invoice
 app.post(
   "/api/invoices/process",
-  authenticateUser,
+  auth,
   upload.single("invoice"),
   async (req, res) => {
     let filePath = null;
-
     try {
       if (!req.file) {
+        req.log.warn("No file uploaded in request");
         return res.status(400).json({ error: "No file uploaded" });
       }
 
       filePath = req.file.path;
-      const userId = req.user.id;
-      const fileName = req.file.originalname;
-      const fileType = req.file.mimetype;
+      const { id: userId } = req.user;
+      const { originalname: fileName, mimetype: fileType } = req.file;
+      const docType = req.body.documentType || "invoice";
 
-      // Extract document type and custom fields from request body
-      const documentType = req.body.documentType || "invoice";
       let customFields = [];
-
       try {
-        if (req.body.customFields) {
+        if (req.body.customFields)
           customFields = JSON.parse(req.body.customFields);
-        }
-      } catch (parseError) {
-        console.warn("⚠️  Failed to parse custom fields:", parseError.message);
+      } catch (e) {
+        req.log.warn("Failed to parse custom fields");
       }
 
-      console.log("📄 Processing document for user:", userId);
-      console.log("📁 File:", fileName);
-      console.log("📋 Type:", fileType);
-      console.log("🏷️  Document Type:", documentType);
-      console.log("🔧 Custom Fields:", JSON.stringify(customFields, null, 2));
+      req.log.info({ fileName, userId, docType }, "Processing invoice");
 
-      // Step 1: Upload file to Supabase Storage
-      const storagePath = `${userId}/${Date.now()}_${fileName}`;
-      const fileBuffer = fs.readFileSync(filePath);
+      // Upload to storage
+      const publicUrl = await uploadToStorage(
+        userId,
+        fileName,
+        filePath,
+        fileType,
+      );
 
-      console.log("☁️  Uploading to Supabase...");
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("invoices")
-        .upload(storagePath, fileBuffer, {
-          contentType: fileType,
-          upsert: false,
-        });
-
-      if (uploadError) {
-        console.error("❌ Upload error:", uploadError);
-        throw new Error(`Failed to upload file: ${uploadError.message}`);
-      }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("invoices").getPublicUrl(storagePath);
-
-      console.log("✅ Uploaded to Supabase:", publicUrl);
-
-      // Step 2: Create invoice record with 'processing' status
-      console.log("💾 Creating invoice record...");
+      // Create invoice record
       const { data: invoice, error: insertError } = await supabase
         .from("invoices")
         .insert({
@@ -178,64 +235,34 @@ app.post(
           file_url: publicUrl,
           file_name: fileName,
           status: "processing",
-          document_type: documentType,
+          document_type: docType,
           custom_fields: customFields.length > 0 ? customFields : null,
         })
         .select()
         .single();
 
       if (insertError) {
-        console.error("❌ Insert error:", insertError);
-        throw new Error(`Failed to create invoice: ${insertError.message}`);
+        req.log.error({ error: insertError }, "Database insert failed");
+        throw new Error(`DB insert failed: ${insertError.message}`);
       }
 
-      console.log("✅ Invoice created:", invoice.id);
+      req.log.info({ invoiceId: invoice.id }, "Invoice record created");
 
-      // Step 3: Send file + metadata to LLM server for processing
-      console.log("🤖 Preparing data for LLM server...");
-      const formData = new FormData();
-
-      // Append the file
-      formData.append("file", fs.createReadStream(filePath), {
-        filename: fileName,
-        contentType: fileType,
-      });
-
-      // Append document type
-      formData.append("document_type", documentType);
-
-      // Append custom fields as JSON string
-      if (customFields.length > 0) {
-        formData.append("custom_fields", JSON.stringify(customFields));
-        console.log("📦 Custom fields added to request");
-      }
-
-      console.log("🚀 Sending to LLM server...");
-      const llmResponse = await fetch(
-        `${process.env.LLM_SERVER_URL}/parse-invoice`,
-        {
-          method: "POST",
-          body: formData,
-          headers: formData.getHeaders(),
-          timeout: 120000, // 2 minutes timeout
-        },
+      // Send to LLM
+      const llmResult = await sendToLLM(
+        filePath,
+        fileName,
+        fileType,
+        docType,
+        customFields,
       );
 
-      if (!llmResponse.ok) {
-        const errorText = await llmResponse.text();
-        console.error("❌ LLM error:", errorText);
-        throw new Error(`LLM processing failed: ${llmResponse.statusText}`);
-      }
-
-      const llmResult = await llmResponse.json();
-      console.log("✅ LLM processing completed");
-
       if (!llmResult.success) {
+        req.log.error({ error: llmResult.error }, "LLM parsing failed");
         throw new Error(llmResult.error || "LLM parsing failed");
       }
 
-      // Step 4: Update invoice with parsed data
-      console.log("💾 Saving parsed data...");
+      // Update with parsed data
       const { data: updatedInvoice, error: updateError } = await supabase
         .from("invoices")
         .update({
@@ -248,43 +275,35 @@ app.post(
         .single();
 
       if (updateError) {
-        console.error("❌ Update error:", updateError);
-        throw new Error(`Failed to update invoice: ${updateError.message}`);
+        req.log.error({ error: updateError }, "Invoice update failed");
+        throw new Error(`Update failed: ${updateError.message}`);
       }
 
-      console.log("✅ Complete! Invoice:", updatedInvoice.id);
-
-      // Clean up temp file
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        console.log("🧹 Cleaned up temp file");
-      }
+      cleanup(filePath);
+      req.log.info(
+        { invoiceId: updatedInvoice.id },
+        "Invoice processed successfully",
+      );
 
       res.json({
         success: true,
-        message: "Document processed successfully",
+        message: "Processed successfully",
         invoice: updatedInvoice,
       });
     } catch (error) {
-      console.error("❌ Error:", error.message);
-
-      // Clean up temp file
-      if (filePath && fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-
-      res.status(500).json({
-        success: false,
-        error: error.message,
-      });
+      req.log.error({ error, filePath }, "Invoice processing failed");
+      cleanup(filePath);
+      res.status(500).json({ success: false, error: error.message });
     }
   },
 );
 
-// Get all invoices for user
-app.get("/api/invoices", authenticateUser, async (req, res) => {
+// Get all invoices
+app.get("/api/invoices", auth, async (req, res) => {
   try {
     const { status, limit = 50, offset = 0 } = req.query;
+
+    req.log.debug({ status, limit, offset }, "Fetching invoices");
 
     let query = supabase
       .from("invoices")
@@ -293,13 +312,12 @@ app.get("/api/invoices", authenticateUser, async (req, res) => {
       .order("created_at", { ascending: false })
       .range(offset, offset + parseInt(limit) - 1);
 
-    if (status) {
-      query = query.eq("status", status);
-    }
+    if (status) query = query.eq("status", status);
 
     const { data: invoices, error, count } = await query;
-
     if (error) throw error;
+
+    req.log.info({ count, limit, offset }, "Invoices fetched successfully");
 
     res.json({
       success: true,
@@ -311,16 +329,13 @@ app.get("/api/invoices", authenticateUser, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching invoices:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
+    req.log.error({ error }, "Failed to fetch invoices");
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // Get single invoice
-app.get("/api/invoices/:id", authenticateUser, async (req, res) => {
+app.get("/api/invoices/:id", auth, async (req, res) => {
   try {
     const { data: invoice, error } = await supabase
       .from("invoices")
@@ -329,31 +344,27 @@ app.get("/api/invoices/:id", authenticateUser, async (req, res) => {
       .eq("user_id", req.user.id)
       .single();
 
-    if (error) {
-      if (error.code === "PGRST116") {
-        return res.status(404).json({
-          success: false,
-          error: "Invoice not found",
-        });
-      }
-      throw error;
+    if (error?.code === "PGRST116") {
+      req.log.warn({ invoiceId: req.params.id }, "Invoice not found");
+      return res
+        .status(404)
+        .json({ success: false, error: "Invoice not found" });
     }
+    if (error) throw error;
 
-    res.json({
-      success: true,
-      invoice,
-    });
+    req.log.info({ invoiceId: invoice.id }, "Invoice retrieved");
+    res.json({ success: true, invoice });
   } catch (error) {
-    console.error("Error fetching invoice:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
+    req.log.error(
+      { error, invoiceId: req.params.id },
+      "Failed to fetch invoice",
+    );
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // Delete invoice
-app.delete("/api/invoices/:id", authenticateUser, async (req, res) => {
+app.delete("/api/invoices/:id", auth, async (req, res) => {
   try {
     const { data: invoice, error: fetchError } = await supabase
       .from("invoices")
@@ -362,62 +373,55 @@ app.delete("/api/invoices/:id", authenticateUser, async (req, res) => {
       .eq("user_id", req.user.id)
       .single();
 
-    if (fetchError) {
-      if (fetchError.code === "PGRST116") {
-        return res.status(404).json({
-          success: false,
-          error: "Invoice not found",
-        });
-      }
-      throw fetchError;
+    if (fetchError?.code === "PGRST116") {
+      req.log.warn(
+        { invoiceId: req.params.id },
+        "Invoice not found for deletion",
+      );
+      return res
+        .status(404)
+        .json({ success: false, error: "Invoice not found" });
     }
+    if (fetchError) throw fetchError;
 
     // Delete from storage
     const urlParts = invoice.file_url.split("/");
     const bucketPath = urlParts.slice(-2).join("/");
-
     await supabase.storage.from("invoices").remove([bucketPath]);
 
-    // Delete from database
+    // Delete from DB
     const { error: deleteError } = await supabase
       .from("invoices")
       .delete()
-      .eq("id", req.params.id)
-      .eq("user_id", req.user.id);
+      .eq("id", req.params.id);
 
     if (deleteError) throw deleteError;
 
-    res.json({
-      success: true,
-      message: "Invoice deleted successfully",
-    });
+    req.log.info({ invoiceId: req.params.id }, "Invoice deleted successfully");
+    res.json({ success: true, message: "Invoice deleted" });
   } catch (error) {
-    console.error("Error deleting invoice:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
+    req.log.error(
+      { error, invoiceId: req.params.id },
+      "Failed to delete invoice",
+    );
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Error handling middleware
+// Error handler
 app.use((error, req, res, next) => {
-  console.error("Unhandled error:", error);
-  res.status(500).json({
-    success: false,
-    error: error.message || "Internal server error",
-  });
+  req.log.error({ error }, "Unhandled error");
+  res.status(500).json({ success: false, error: error.message });
 });
 
-// Start server
+// Start
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log("═══════════════════════════════════════");
-  console.log("🚀 Express Backend Server");
-  console.log("═══════════════════════════════════════");
-  console.log(`📍 Running on: http://localhost:${PORT}`);
-  console.log(`🏥 Health: http://localhost:${PORT}/health`);
-  console.log(`🔗 LLM Server: ${process.env.LLM_SERVER_URL}`);
-  console.log(`📋 Role: File upload & Supabase management`);
-  console.log("═══════════════════════════════════════");
+  logger.info("═══════════════════════════════════════");
+  logger.info("🚀 Express Backend Server");
+  logger.info("═══════════════════════════════════════");
+  logger.info(`📍 Running on: http://localhost:${PORT}`);
+  logger.info(`🏥 Health: http://localhost:${PORT}/health`);
+  logger.info(`🔗 LLM Server: ${process.env.LLM_SERVER_URL}`);
+  logger.info("═══════════════════════════════════════");
 });
