@@ -118,12 +118,21 @@ const uploadToStorage = async (userId, fileName, filePath, fileType) => {
     throw new Error(`Upload failed: ${error.message}`);
   }
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from("invoices").getPublicUrl(storagePath);
+  // Changed from getPublicUrl to createSignedUrl
+  const { data, error: urlError } = await supabase.storage
+    .from("invoices")
+    .createSignedUrl(storagePath, 31536000); // 1 year expiration
 
-  logger.info({ publicUrl }, "File uploaded successfully");
-  return publicUrl;
+  if (urlError) {
+    logger.error(
+      { error: urlError, storagePath },
+      "Failed to create signed URL",
+    );
+    throw new Error(`Failed to create signed URL: ${urlError.message}`);
+  }
+
+  logger.info({ signedUrl: data.signedUrl }, "File uploaded successfully");
+  return data.signedUrl;
 };
 
 const sendToLLM = async (
