@@ -88,6 +88,7 @@ async def health():
 @app.post("/test-image")
 async def test_image(file: UploadFile = File(...)):
     """Test image encoding"""
+
     try:
         contents = await file.read()
         logger.info(f"🖼️  Testing image: {
