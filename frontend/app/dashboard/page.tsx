@@ -26,6 +26,13 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Loader2,
   Upload,
   FileText,
@@ -39,19 +46,58 @@ import {
   Settings,
   Bell,
   Search,
-  TrendingUp,
   DollarSign,
   FileCheck,
   Clock,
-  ChevronRight,
   Menu,
-  LogOut,
   Download,
   Eye,
   Filter,
   Calendar,
   BarChart3,
+  Copy,
+  Check,
+  Code2,
 } from "lucide-react";
+
+// JSON Syntax Highlighter Component
+const JSONViewer = ({ data }) => {
+  const syntaxHighlight = (json) => {
+    if (!json) return "";
+
+    json = JSON.stringify(json, null, 2);
+    json = json
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    return json.replace(
+      /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+      (match) => {
+        let cls = "text-blue-400"; // number
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) {
+            cls = "text-purple-400"; // key
+          } else {
+            cls = "text-green-400"; // string
+          }
+        } else if (/true|false/.test(match)) {
+          cls = "text-yellow-400"; // boolean
+        } else if (/null/.test(match)) {
+          cls = "text-red-400"; // null
+        }
+        return `<span class="${cls}">${match}</span>`;
+      },
+    );
+  };
+
+  return (
+    <div
+      className="json-viewer"
+      dangerouslySetInnerHTML={{ __html: syntaxHighlight(data) }}
+    />
+  );
+};
 
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -66,6 +112,10 @@ export default function Dashboard() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [documentType, setDocumentType] = useState("invoice");
   const [customFields, setCustomFields] = useState([]);
+
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const fetchInvoices = async () => {
     try {
@@ -85,7 +135,6 @@ export default function Dashboard() {
     }
   }, [user]);
 
-  // Calculate stats
   const stats = {
     total: invoices.length,
     completed: invoices.filter((inv) => inv.status === "completed").length,
@@ -169,6 +218,36 @@ export default function Dashboard() {
     }
   };
 
+  const handlePreview = (invoice) => {
+    setSelectedInvoice(invoice);
+    setPreviewOpen(true);
+    setCopied(false);
+  };
+
+  const handleCopyJSON = () => {
+    if (selectedInvoice?.parsed_data) {
+      const jsonString = JSON.stringify(selectedInvoice.parsed_data, null, 2);
+      navigator.clipboard.writeText(jsonString);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleDownloadJSON = () => {
+    if (selectedInvoice?.parsed_data) {
+      const jsonString = JSON.stringify(selectedInvoice.parsed_data, null, 2);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${selectedInvoice.file_name.replace(/\.[^/.]+$/, "")}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900">
@@ -200,8 +279,7 @@ export default function Dashboard() {
             sidebarOpen ? "w-64" : "w-20"
           } bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 flex flex-col`}
         >
-          {/* Logo & Toggle */}
-          <div className="h-16 flex items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800">
+          <div className="h-16 flex items-center justify-between px-4 border-b">
             {sidebarOpen && (
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
@@ -220,45 +298,31 @@ export default function Dashboard() {
             </Button>
           </div>
 
-          {/* Navigation */}
           <nav className="flex-1 p-4 space-y-2">
             <button
               onClick={() => setActiveView("dashboard")}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                activeView === "dashboard"
-                  ? "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400"
-                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeView === "dashboard" ? "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400" : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"}`}
             >
               <LayoutDashboard className="h-5 w-5 flex-shrink-0" />
               {sidebarOpen && <span className="font-medium">Dashboard</span>}
             </button>
             <button
               onClick={() => setActiveView("documents")}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                activeView === "documents"
-                  ? "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400"
-                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeView === "documents" ? "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400" : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"}`}
             >
               <FolderOpen className="h-5 w-5 flex-shrink-0" />
               {sidebarOpen && <span className="font-medium">Documents</span>}
             </button>
             <button
               onClick={() => setActiveView("analytics")}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                activeView === "analytics"
-                  ? "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400"
-                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeView === "analytics" ? "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400" : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"}`}
             >
               <BarChart3 className="h-5 w-5 flex-shrink-0" />
               {sidebarOpen && <span className="font-medium">Analytics</span>}
             </button>
           </nav>
 
-          {/* User Profile */}
-          <div className="p-4 border-t border-slate-200 dark:border-slate-800">
+          <div className="p-4 border-t">
             <div
               className={`flex items-center gap-3 ${!sidebarOpen && "justify-center"}`}
             >
@@ -279,15 +343,11 @@ export default function Dashboard() {
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Top Bar */}
-          <header className="h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6">
+          <header className="h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b flex items-center justify-between px-6">
             <div className="flex items-center gap-4 flex-1">
               <div className="relative max-w-md w-full">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search documents..."
-                  className="pl-9 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
-                />
+                <Input placeholder="Search documents..." className="pl-9" />
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -301,9 +361,7 @@ export default function Dashboard() {
             </div>
           </header>
 
-          {/* Scrollable Content */}
           <main className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* Alerts */}
             {error && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
@@ -312,7 +370,7 @@ export default function Dashboard() {
             )}
 
             {success && (
-              <Alert className="border-green-200 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950 dark:text-green-100">
+              <Alert className="border-green-200 bg-green-50 text-green-900">
                 <CheckCircle2 className="h-4 w-4" />
                 <AlertDescription>{success}</AlertDescription>
               </Alert>
@@ -320,7 +378,7 @@ export default function Dashboard() {
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0 shadow-lg shadow-blue-500/20">
+              <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0">
                 <CardHeader className="pb-3">
                   <CardDescription className="text-blue-100">
                     Total Documents
@@ -337,7 +395,7 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-green-500 to-emerald-600 text-white border-0 shadow-lg shadow-green-500/20">
+              <Card className="bg-gradient-to-br from-green-500 to-emerald-600 text-white border-0">
                 <CardHeader className="pb-3">
                   <CardDescription className="text-green-100">
                     Completed
@@ -353,13 +411,13 @@ export default function Dashboard() {
                       {stats.total > 0
                         ? ((stats.completed / stats.total) * 100).toFixed(0)
                         : 0}
-                      % success rate
+                      % success
                     </span>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-amber-500 to-orange-600 text-white border-0 shadow-lg shadow-amber-500/20">
+              <Card className="bg-gradient-to-br from-amber-500 to-orange-600 text-white border-0">
                 <CardHeader className="pb-3">
                   <CardDescription className="text-amber-100">
                     Processing
@@ -376,7 +434,7 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white border-0 shadow-lg shadow-purple-500/20">
+              <Card className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white border-0">
                 <CardHeader className="pb-3">
                   <CardDescription className="text-purple-100">
                     Total Value
@@ -388,51 +446,34 @@ export default function Dashboard() {
                 <CardContent>
                   <div className="flex items-center gap-2 text-sm text-purple-100">
                     <DollarSign className="h-4 w-4" />
-                    <span>Processed amount</span>
+                    <span>Processed</span>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
             {/* Upload Section */}
-            <Card className="border-2 border-dashed border-slate-300 dark:border-slate-700 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm shadow-xl">
+            <Card className="border-2 border-dashed">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Upload className="h-5 w-5 text-blue-600" />
-                      Upload New Document
-                    </CardTitle>
-                    <CardDescription className="mt-1">
-                      Drag & drop or click to upload invoices, receipts, or
-                      other documents
-                    </CardDescription>
-                  </div>
-                  <Badge variant="secondary" className="text-xs">
-                    AI-Powered
-                  </Badge>
-                </div>
+                <CardTitle className="flex items-center gap-2">
+                  <Upload className="h-5 w-5 text-blue-600" />
+                  Upload New Document
+                </CardTitle>
+                <CardDescription>
+                  Upload documents for AI parsing
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid md:grid-cols-2 gap-4">
-                  {/* Document Type */}
                   <div className="space-y-2">
-                    <Label
-                      htmlFor="document-type"
-                      className="text-sm font-medium"
-                    >
-                      Document Type
-                    </Label>
+                    <Label htmlFor="document-type">Document Type</Label>
                     <Select
                       value={documentType}
                       onValueChange={setDocumentType}
                       disabled={uploading}
                     >
-                      <SelectTrigger
-                        id="document-type"
-                        className="bg-white dark:bg-slate-800"
-                      >
-                        <SelectValue placeholder="Select document type" />
+                      <SelectTrigger id="document-type">
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="invoice">📄 Invoice</SelectItem>
@@ -446,9 +487,8 @@ export default function Dashboard() {
                     </Select>
                   </div>
 
-                  {/* File Upload */}
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">File Upload</Label>
+                    <Label>File Upload</Label>
                     <Input
                       type="file"
                       id="invoice-upload"
@@ -459,16 +499,12 @@ export default function Dashboard() {
                     />
                     <label
                       htmlFor="invoice-upload"
-                      className={`flex items-center justify-center h-[42px] px-4 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
-                        selectedFile
-                          ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
-                          : "border-slate-300 dark:border-slate-700 hover:border-blue-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                      } ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
+                      className={`flex items-center justify-center h-[42px] px-4 border-2 border-dashed rounded-lg cursor-pointer ${selectedFile ? "border-blue-500 bg-blue-50" : "border-slate-300 hover:border-blue-400"}`}
                     >
                       {selectedFile ? (
                         <div className="flex items-center gap-2 text-sm">
                           <FileText className="h-4 w-4 text-blue-600" />
-                          <span className="font-medium text-blue-600 truncate max-w-[200px]">
+                          <span className="font-medium text-blue-600 truncate">
                             {selectedFile.name}
                           </span>
                         </div>
@@ -482,106 +518,86 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Custom Fields */}
-                {selectedFile && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">
-                        Custom Fields (Optional)
-                      </Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={addCustomField}
-                        disabled={uploading}
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Add Field
-                      </Button>
-                    </div>
-
-                    {customFields.length > 0 && (
-                      <div className="space-y-2">
-                        {customFields.map((field, index) => (
-                          <div key={index} className="flex gap-2">
-                            <Input
-                              placeholder="Field name"
-                              value={field.field}
-                              onChange={(e) =>
-                                updateCustomField(
-                                  index,
-                                  "field",
-                                  e.target.value,
-                                )
-                              }
-                              disabled={uploading}
-                              className="bg-white dark:bg-slate-800"
-                            />
-                            <Input
-                              placeholder="Description"
-                              value={field.description}
-                              onChange={(e) =>
-                                updateCustomField(
-                                  index,
-                                  "description",
-                                  e.target.value,
-                                )
-                              }
-                              disabled={uploading}
-                              className="bg-white dark:bg-slate-800"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeCustomField(index)}
-                              disabled={uploading}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
+                {selectedFile && customFields.length > 0 && (
+                  <div className="space-y-2">
+                    {customFields.map((field, index) => (
+                      <div key={index} className="flex gap-2">
+                        <Input
+                          placeholder="Field name"
+                          value={field.field}
+                          onChange={(e) =>
+                            updateCustomField(index, "field", e.target.value)
+                          }
+                          disabled={uploading}
+                        />
+                        <Input
+                          placeholder="Description"
+                          value={field.description}
+                          onChange={(e) =>
+                            updateCustomField(
+                              index,
+                              "description",
+                              e.target.value,
+                            )
+                          }
+                          disabled={uploading}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeCustomField(index)}
+                          disabled={uploading}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-                    )}
+                    ))}
                   </div>
                 )}
 
-                {/* Upload Button */}
                 {selectedFile && (
-                  <div className="space-y-3">
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={addCustomField}
+                      disabled={uploading}
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add Custom Field
+                    </Button>
                     <Button
                       onClick={handleUpload}
                       disabled={uploading}
-                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600"
                       size="lg"
                     >
                       {uploading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Processing with AI...
+                          Processing...
                         </>
                       ) : (
                         <>
                           <Upload className="mr-2 h-4 w-4" />
-                          Upload & Process Document
+                          Upload & Process
                         </>
                       )}
                     </Button>
                     {uploading && <Progress value={66} className="h-1" />}
-                  </div>
+                  </>
                 )}
               </CardContent>
             </Card>
 
-            {/* Recent Documents */}
-            <Card className="shadow-xl border-slate-200 dark:border-slate-800">
+            {/* Documents List */}
+            <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-xl">Recent Documents</CardTitle>
-                    <CardDescription className="mt-1">
-                      Latest processed documents and their status
+                    <CardTitle>Recent Documents</CardTitle>
+                    <CardDescription>
+                      Latest processed documents
                     </CardDescription>
                   </div>
                   <div className="flex gap-2">
@@ -600,21 +616,16 @@ export default function Dashboard() {
                 {loading ? (
                   <div className="flex flex-col items-center justify-center py-16">
                     <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-                    <p className="text-sm text-muted-foreground">
-                      Loading documents...
-                    </p>
+                    <p className="text-sm text-muted-foreground">Loading...</p>
                   </div>
                 ) : invoices.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <div className="w-20 h-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
-                      <FileText className="h-10 w-10 text-slate-400" />
-                    </div>
+                    <FileText className="h-12 w-12 text-slate-400 mb-4" />
                     <h3 className="font-semibold text-lg mb-2">
                       No documents yet
                     </h3>
-                    <p className="text-sm text-muted-foreground max-w-sm">
-                      Upload your first document above to get started with
-                      AI-powered parsing
+                    <p className="text-sm text-muted-foreground">
+                      Upload your first document above
                     </p>
                   </div>
                 ) : (
@@ -622,12 +633,12 @@ export default function Dashboard() {
                     {invoices.map((invoice) => (
                       <Card
                         key={invoice.id}
-                        className="group hover:shadow-lg transition-all duration-200 border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700"
+                        className="group hover:shadow-lg transition-all"
                       >
                         <CardContent className="p-5">
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-start gap-4 flex-1">
-                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/30">
+                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
                                 <FileText className="h-6 w-6 text-white" />
                               </div>
                               <div className="flex-1 min-w-0">
@@ -643,7 +654,6 @@ export default function Dashboard() {
                                           ? "secondary"
                                           : "destructive"
                                     }
-                                    className="capitalize"
                                   >
                                     {invoice.status}
                                   </Badge>
@@ -673,13 +683,14 @@ export default function Dashboard() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8"
+                                onClick={() => handlePreview(invoice)}
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                className="h-8 w-8 text-destructive"
                                 onClick={() => handleDelete(invoice.id)}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -693,7 +704,7 @@ export default function Dashboard() {
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div className="space-y-1">
                                   <p className="text-xs text-muted-foreground font-medium">
-                                    Invoice Number
+                                    Invoice #
                                   </p>
                                   <p className="font-semibold">
                                     {invoice.parsed_data.invoice_number || "—"}
@@ -717,7 +728,7 @@ export default function Dashboard() {
                                 </div>
                                 <div className="space-y-1">
                                   <p className="text-xs text-muted-foreground font-medium">
-                                    Total Amount
+                                    Total
                                   </p>
                                   <p className="font-bold text-lg text-blue-600">
                                     {invoice.parsed_data.currency || "$"}
@@ -740,13 +751,14 @@ export default function Dashboard() {
                                       </Badge>
                                     </p>
                                     <div className="space-y-2">
-                                      {invoice.parsed_data.items.map(
-                                        (item, idx) => (
+                                      {invoice.parsed_data.items
+                                        .slice(0, 3)
+                                        .map((item, idx) => (
                                           <div
                                             key={idx}
-                                            className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-sm border border-slate-200 dark:border-slate-700"
+                                            className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-sm"
                                           >
-                                            <span className="flex-1 font-medium">
+                                            <span className="flex-1 font-medium truncate">
                                               {item.description}
                                             </span>
                                             <div className="flex items-center gap-4 text-muted-foreground">
@@ -764,7 +776,13 @@ export default function Dashboard() {
                                               </span>
                                             </div>
                                           </div>
-                                        ),
+                                        ))}
+                                      {invoice.parsed_data.items.length > 3 && (
+                                        <p className="text-xs text-muted-foreground text-center py-2">
+                                          +
+                                          {invoice.parsed_data.items.length - 3}{" "}
+                                          more items
+                                        </p>
                                       )}
                                     </div>
                                   </div>
@@ -782,6 +800,147 @@ export default function Dashboard() {
           </main>
         </div>
       </div>
+
+      {/* Enhanced Preview Modal */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="!max-w-[80rem] sm:!max-w-[80rem] w-[95vw]">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                  <FileText className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-lg">
+                    {selectedInvoice?.file_name}
+                  </DialogTitle>
+                  <DialogDescription className="text-xs">
+                    View document and parsed data
+                  </DialogDescription>
+                </div>
+              </div>
+              <Badge
+                variant={
+                  selectedInvoice?.status === "completed"
+                    ? "default"
+                    : "secondary"
+                }
+              >
+                {selectedInvoice?.status}
+              </Badge>
+            </div>
+          </DialogHeader>
+
+          <div className="flex gap-6 p-6 h-[calc(90vh-120px)]">
+            {/* Left Side - Document Preview */}
+            <div className="flex-1 flex flex-col">
+              <div className="flex items-center gap-2 mb-4">
+                <Eye className="h-4 w-4 text-muted-foreground" />
+                <h3 className="font-semibold text-sm">Document Preview</h3>
+              </div>
+              {selectedInvoice?.file_url ? (
+                <div className="flex-1 border-2 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900 shadow-inner">
+                  {selectedInvoice.file_url.endsWith(".pdf") ? (
+                    <iframe
+                      src={selectedInvoice.file_url}
+                      className="w-full h-full"
+                      title="PDF Preview"
+                    />
+                  ) : (
+                    <img
+                      src={selectedInvoice.file_url}
+                      alt={selectedInvoice.file_name}
+                      className="w-full h-full object-contain p-4"
+                    />
+                  )}
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center border-2 border-dashed rounded-xl bg-slate-50 dark:bg-slate-900">
+                  <div className="text-center">
+                    <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">
+                      Preview not available
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right Side - JSON Data */}
+            <div className="flex-1 flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Code2 className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="font-semibold text-sm">Parsed Data (JSON)</h3>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyJSON}
+                    className={copied ? "border-green-500 text-green-600" : ""}
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="h-4 w-4 mr-2" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDownloadJSON}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex-1 relative rounded-xl overflow-hidden border-2 border-slate-200 dark:border-slate-800 shadow-lg flex flex-col">
+                <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-3 border-b border-slate-700 flex items-center justify-between flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                      <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    </div>
+                    <span className="text-xs font-mono text-slate-300">
+                      parsed_data.json
+                    </span>
+                  </div>
+                  <Badge
+                    variant="secondary"
+                    className="text-xs bg-slate-700 text-slate-200"
+                  >
+                    <Code2 className="h-3 w-3 mr-1" />
+                    JSON
+                  </Badge>
+                </div>
+
+                <div className="flex-1 bg-slate-950 p-6 overflow-auto">
+                  <pre className="font-mono text-sm leading-relaxed w-full">
+                    <JSONViewer data={selectedInvoice?.parsed_data} />
+                  </pre>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-4">
+                <AlertCircle className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                <span>
+                  This JSON can be used directly in your applications via API
+                </span>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
