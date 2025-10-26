@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import PDFViewer from "@/components/PDFViewer";
 
 type Props = {
   previewOpen: Boolean | undefined;
@@ -77,19 +78,12 @@ export const Modal = ({
             </div>
             {selectedInvoice?.file_url ? (
               <div className="flex-1 border-2 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900 shadow-inner">
-                {selectedInvoice.file_url.endsWith(".pdf") ? (
-                  <iframe
-                    src={selectedInvoice.file_url}
-                    className="w-full h-full"
-                    title="PDF Preview"
-                  />
-                ) : (
-                  <img
-                    src={selectedInvoice.file_url}
-                    alt={selectedInvoice.file_name}
-                    className="w-full h-full object-contain p-4"
-                  />
-                )}
+                <PDFViewer
+                  file={selectedInvoice?.file_url}
+                  width={300}
+                  containerWidth="350px"
+                  containerHeight="400px"
+                />
               </div>
             ) : (
               <div className="flex-1 flex items-center justify-center border-2 border-dashed rounded-xl bg-slate-50 dark:bg-slate-900">
