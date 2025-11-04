@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { invoiceAPI } from "@/lib/api";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -48,6 +49,7 @@ import {
   Filter,
   Calendar,
   BarChart3,
+  LogOut,
 } from "lucide-react";
 import { Modal } from "./modal";
 
@@ -90,8 +92,8 @@ const JSONViewer = ({ data }) => {
   );
 };
 
-export default function Dashboard() {
-  const { user, loading: authLoading } = useAuth();
+function DashboardContent() {
+  const { user, signOut } = useAuth();
   const [invoices, setInvoices] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -239,27 +241,11 @@ export default function Dashboard() {
     }
   };
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900">
-        <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-        <Alert variant="destructive" className="max-w-md">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Not authenticated</AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
+  const handleLogout = async () => {
+    if (confirm("Are you sure you want to log out?")) {
+      await signOut();
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900">
@@ -313,22 +299,46 @@ export default function Dashboard() {
             </button>
           </nav>
 
-          <div className="p-4 border-t">
+          <div className="p-4 border-t space-y-2">
+            {/* User Profile */}
             <div
               className={`flex items-center gap-3 ${!sidebarOpen && "justify-center"}`}
             >
               <Avatar className="h-9 w-9">
                 <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white">
-                  {user.email?.charAt(0).toUpperCase()}
+                  {user?.email?.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               {sidebarOpen && (
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{user.email}</p>
+                  <p className="text-sm font-medium truncate">{user?.email}</p>
                   <p className="text-xs text-muted-foreground">Free Plan</p>
                 </div>
               )}
             </div>
+
+            {/* Logout Button */}
+            {sidebarOpen && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                className="w-full justify-start text-destructive hover:text-destructive"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            )}
+            {!sidebarOpen && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleLogout}
+                className="w-full text-destructive hover:text-destructive"
+              >
+                <LogOut className="h-5 w-5" />
+              </Button>
+            )}
           </div>
         </aside>
 
@@ -803,5 +813,13 @@ export default function Dashboard() {
         copied={copied}
       />
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }
