@@ -42,14 +42,14 @@ export const Modal = ({
   return (
     <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
       <DialogContent className="!max-w-[80rem] sm:!max-w-[80rem] w-[95vw]">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b-[4px] border-black">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+              <div className="w-10 h-10 bg-primary border-[3px] border-black flex items-center justify-center brutalist-shadow-sm">
                 <FileText className="h-5 w-5 text-white" />
               </div>
               <div>
-                <DialogTitle className="text-lg">
+                <DialogTitle className="text-lg font-bold">
                   {selectedInvoice?.file_name}
                 </DialogTitle>
                 <DialogDescription className="text-xs">
@@ -77,7 +77,7 @@ export const Modal = ({
               <h3 className="font-semibold text-sm">Document Preview</h3>
             </div>
             {selectedInvoice?.file_url ? (
-              <div className="flex-1 border-2 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900 shadow-inner">
+              <div className="flex-1 border-[4px] border-black overflow-hidden bg-secondary brutalist-shadow">
                 <PDFViewer
                   file={selectedInvoice?.file_url}
                   width={300}
@@ -86,10 +86,10 @@ export const Modal = ({
                 />
               </div>
             ) : (
-              <div className="flex-1 flex items-center justify-center border-2 border-dashed rounded-xl bg-slate-50 dark:bg-slate-900">
+              <div className="flex-1 flex items-center justify-center border-[4px] border-dashed border-black bg-secondary">
                 <div className="text-center">
                   <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">Preview not available</p>
+                  <p className="text-muted-foreground font-bold">Preview not available</p>
                 </div>
               </div>
             )}
@@ -107,7 +107,7 @@ export const Modal = ({
                   variant="outline"
                   size="sm"
                   onClick={handleCopyJSON}
-                  className={copied ? "border-green-500 text-green-600" : ""}
+                  className={copied ? "border-primary bg-accent text-primary" : ""}
                 >
                   {copied ? (
                     <>
@@ -132,21 +132,21 @@ export const Modal = ({
               </div>
             </div>
 
-            <div className="flex-1 relative rounded-xl overflow-hidden border-2 border-slate-200 dark:border-slate-800 shadow-lg flex flex-col">
-              <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-3 border-b border-slate-700 flex items-center justify-between flex-shrink-0">
+            <div className="flex-1 relative overflow-hidden border-[4px] border-black brutalist-shadow flex flex-col">
+              <div className="bg-black px-4 py-3 border-b-[4px] border-black flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <div className="w-3 h-3 bg-destructive border-[2px] border-black"></div>
+                    <div className="w-3 h-3 bg-[#F59E0B] border-[2px] border-black"></div>
+                    <div className="w-3 h-3 bg-primary border-[2px] border-black"></div>
                   </div>
-                  <span className="text-xs font-mono text-slate-300">
+                  <span className="text-xs font-mono font-bold text-white uppercase">
                     parsed_data.json
                   </span>
                 </div>
                 <Badge
                   variant="secondary"
-                  className="text-xs bg-slate-700 text-slate-200"
+                  className="text-xs bg-white text-black border-[2px] border-black"
                 >
                   <Code2 className="h-3 w-3 mr-1" />
                   JSON
@@ -160,9 +160,9 @@ export const Modal = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-4">
-              <AlertCircle className="h-4 w-4 text-blue-600 flex-shrink-0" />
-              <span>
+            <div className="flex items-center gap-2 text-xs bg-accent border-[3px] border-black p-3 mt-4 brutalist-shadow-sm">
+              <AlertCircle className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="font-medium">
                 This JSON can be used directly in your applications via API
               </span>
             </div>

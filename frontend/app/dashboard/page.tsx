@@ -248,18 +248,18 @@ function DashboardContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900">
+    <div className="min-h-screen bg-white">
       <div className="flex h-screen overflow-hidden">
         {/* Sidebar */}
         <aside
           className={`${
             sidebarOpen ? "w-64" : "w-20"
-          } bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 flex flex-col`}
+          } bg-secondary border-r-[4px] border-black transition-all duration-300 flex flex-col`}
         >
-          <div className="h-16 flex items-center justify-between px-4 border-b">
+          <div className="h-16 flex items-center justify-between px-4 border-b-[4px] border-black">
             {sidebarOpen && (
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-primary border-[2px] border-black flex items-center justify-center brutalist-shadow-sm">
                   <FileText className="h-5 w-5 text-white" />
                 </div>
                 <span className="font-bold text-lg">DocParse</span>
@@ -278,34 +278,34 @@ function DashboardContent() {
           <nav className="flex-1 p-4 space-y-2">
             <button
               onClick={() => setActiveView("dashboard")}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeView === "dashboard" ? "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400" : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"}`}
+              className={`w-full flex items-center gap-3 px-3 py-2 border-[3px] transition-colors font-bold uppercase tracking-wide ${activeView === "dashboard" ? "bg-primary text-white border-black brutalist-shadow" : "bg-white text-black border-black hover:bg-accent"}`}
             >
               <LayoutDashboard className="h-5 w-5 flex-shrink-0" />
-              {sidebarOpen && <span className="font-medium">Dashboard</span>}
+              {sidebarOpen && <span className="font-medium text-xs">Dashboard</span>}
             </button>
             <button
               onClick={() => setActiveView("documents")}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeView === "documents" ? "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400" : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"}`}
+              className={`w-full flex items-center gap-3 px-3 py-2 border-[3px] transition-colors font-bold uppercase tracking-wide ${activeView === "documents" ? "bg-primary text-white border-black brutalist-shadow" : "bg-white text-black border-black hover:bg-accent"}`}
             >
               <FolderOpen className="h-5 w-5 flex-shrink-0" />
-              {sidebarOpen && <span className="font-medium">Documents</span>}
+              {sidebarOpen && <span className="font-medium text-xs">Documents</span>}
             </button>
             <button
               onClick={() => setActiveView("analytics")}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${activeView === "analytics" ? "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400" : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"}`}
+              className={`w-full flex items-center gap-3 px-3 py-2 border-[3px] transition-colors font-bold uppercase tracking-wide ${activeView === "analytics" ? "bg-primary text-white border-black brutalist-shadow" : "bg-white text-black border-black hover:bg-accent"}`}
             >
               <BarChart3 className="h-5 w-5 flex-shrink-0" />
-              {sidebarOpen && <span className="font-medium">Analytics</span>}
+              {sidebarOpen && <span className="font-medium text-xs">Analytics</span>}
             </button>
           </nav>
 
-          <div className="p-4 border-t space-y-2">
+          <div className="p-4 border-t-[4px] border-black space-y-2">
             {/* User Profile */}
             <div
               className={`flex items-center gap-3 ${!sidebarOpen && "justify-center"}`}
             >
-              <Avatar className="h-9 w-9">
-                <AvatarFallback className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white">
+              <Avatar className="h-9 w-9 border-[2px] border-black">
+                <AvatarFallback className="bg-primary text-white font-bold">
                   {user?.email?.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
@@ -344,7 +344,7 @@ function DashboardContent() {
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <header className="h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b flex items-center justify-between px-6">
+          <header className="h-16 bg-white border-b-[4px] border-black flex items-center justify-between px-6">
             <div className="flex items-center gap-4 flex-1">
               <div className="relative max-w-md w-full">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -379,34 +379,34 @@ function DashboardContent() {
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0">
+              <Card className="bg-white border-[4px] border-black brutalist-shadow-lg">
                 <CardHeader className="pb-3">
-                  <CardDescription className="text-blue-100">
+                  <CardDescription className="text-muted-foreground uppercase font-bold text-xs">
                     Total Documents
                   </CardDescription>
-                  <CardTitle className="text-3xl font-bold">
+                  <CardTitle className="text-4xl font-black">
                     {stats.total}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-2 text-sm text-blue-100">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
                     <FileText className="h-4 w-4" />
                     <span>All time</span>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-green-500 to-emerald-600 text-white border-0">
+              <Card className="bg-primary text-white border-[4px] border-black brutalist-shadow-lg">
                 <CardHeader className="pb-3">
-                  <CardDescription className="text-green-100">
+                  <CardDescription className="text-white/90 uppercase font-bold text-xs">
                     Completed
                   </CardDescription>
-                  <CardTitle className="text-3xl font-bold">
+                  <CardTitle className="text-4xl font-black">
                     {stats.completed}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-2 text-sm text-green-100">
+                  <div className="flex items-center gap-2 text-sm text-white/90 font-medium">
                     <FileCheck className="h-4 w-4" />
                     <span>
                       {stats.total > 0
@@ -418,34 +418,34 @@ function DashboardContent() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-amber-500 to-orange-600 text-white border-0">
+              <Card className="bg-white border-[4px] border-black brutalist-shadow-lg">
                 <CardHeader className="pb-3">
-                  <CardDescription className="text-amber-100">
+                  <CardDescription className="text-muted-foreground uppercase font-bold text-xs">
                     Processing
                   </CardDescription>
-                  <CardTitle className="text-3xl font-bold">
+                  <CardTitle className="text-4xl font-black">
                     {stats.processing}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-2 text-sm text-amber-100">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground font-medium">
                     <Clock className="h-4 w-4" />
                     <span>In queue</span>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white border-0">
+              <Card className="bg-accent text-black border-[4px] border-black brutalist-shadow-lg">
                 <CardHeader className="pb-3">
-                  <CardDescription className="text-purple-100">
+                  <CardDescription className="text-black/70 uppercase font-bold text-xs">
                     Total Value
                   </CardDescription>
-                  <CardTitle className="text-3xl font-bold">
+                  <CardTitle className="text-4xl font-black">
                     ${stats.totalAmount}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-2 text-sm text-purple-100">
+                  <div className="flex items-center gap-2 text-sm text-black/70 font-medium">
                     <DollarSign className="h-4 w-4" />
                     <span>Processed</span>
                   </div>
@@ -454,10 +454,10 @@ function DashboardContent() {
             </div>
 
             {/* Upload Section */}
-            <Card className="border-2 border-dashed">
+            <Card className="border-[4px] border-black border-dashed">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload className="h-5 w-5 text-blue-600" />
+                <CardTitle className="flex items-center gap-2 uppercase">
+                  <Upload className="h-5 w-5 text-primary" />
                   Upload New Document
                 </CardTitle>
                 <CardDescription>
@@ -500,12 +500,12 @@ function DashboardContent() {
                     />
                     <label
                       htmlFor="invoice-upload"
-                      className={`flex items-center justify-center h-[42px] px-4 border-2 border-dashed rounded-lg cursor-pointer ${selectedFile ? "border-blue-500 bg-blue-50" : "border-slate-300 hover:border-blue-400"}`}
+                      className={`flex items-center justify-center h-[42px] px-4 border-[3px] border-dashed cursor-pointer font-medium ${selectedFile ? "border-primary bg-accent text-primary" : "border-black hover:bg-accent"}`}
                     >
                       {selectedFile ? (
                         <div className="flex items-center gap-2 text-sm">
-                          <FileText className="h-4 w-4 text-blue-600" />
-                          <span className="font-medium text-blue-600 truncate">
+                          <FileText className="h-4 w-4 text-primary" />
+                          <span className="font-bold text-primary truncate">
                             {selectedFile.name}
                           </span>
                         </div>
@@ -570,7 +570,7 @@ function DashboardContent() {
                     <Button
                       onClick={handleUpload}
                       disabled={uploading}
-                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600"
+                      className="w-full"
                       size="lg"
                     >
                       {uploading ? (
@@ -634,12 +634,12 @@ function DashboardContent() {
                     {invoices.map((invoice) => (
                       <Card
                         key={invoice.id}
-                        className="group hover:shadow-lg transition-all"
+                        className="group hover:shadow-[6px_6px_0px_0px_#000000] transition-all"
                       >
                         <CardContent className="p-5">
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-start gap-4 flex-1">
-                              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                              <div className="w-12 h-12 bg-primary border-[3px] border-black flex items-center justify-center flex-shrink-0 brutalist-shadow-sm">
                                 <FileText className="h-6 w-6 text-white" />
                               </div>
                               <div className="flex-1 min-w-0">
@@ -728,10 +728,10 @@ function DashboardContent() {
                                   </p>
                                 </div>
                                 <div className="space-y-1">
-                                  <p className="text-xs text-muted-foreground font-medium">
+                                  <p className="text-xs text-muted-foreground font-medium uppercase">
                                     Total
                                   </p>
-                                  <p className="font-bold text-lg text-blue-600">
+                                  <p className="font-black text-xl text-primary">
                                     {invoice.parsed_data.currency || "$"}
                                     {invoice.parsed_data.total || "0.00"}
                                   </p>

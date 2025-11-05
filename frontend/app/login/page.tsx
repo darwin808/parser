@@ -48,14 +48,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900 p-4">
-      <Card className="w-full max-w-md shadow-2xl">
+    <div className="min-h-screen flex items-center justify-center bg-white p-4">
+      <Card className="w-full max-w-md brutalist-shadow-xl">
         <CardHeader className="space-y-3 text-center pb-6">
-          <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
+          <div className="mx-auto w-16 h-16 bg-primary border-[4px] border-black flex items-center justify-center brutalist-shadow-lg">
             <FileText className="h-8 w-8 text-white" />
           </div>
           <div>
-            <CardTitle className="text-2xl font-bold">
+            <CardTitle className="text-2xl font-black uppercase">
               Welcome to DocParse
             </CardTitle>
             <CardDescription className="mt-2">
@@ -102,7 +102,7 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              className="w-full h-11"
               disabled={loading}
             >
               {loading ? (
